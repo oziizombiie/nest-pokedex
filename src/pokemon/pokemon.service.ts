@@ -11,28 +11,50 @@ import { Pokemon } from './entities/pokemon.entity';
 
 import { CreatePokemonDto } from './dto/create-pokemon.dto';
 import { UpdatePokemonDto } from './dto/update-pokemon.dto';
-import { isMongoId } from 'class-validator';
+import { PaginationDto } from 'src/common/dto/pagination.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class PokemonService {
+  private defaultLimit: number;
   constructor(
     @InjectModel(Pokemon.name)
     private readonly pokemonModel: Model<Pokemon>,
-  ) {}
+
+    private readonly configService: ConfigService,
+  ) {
+    this.defaultLimit = configService.get<number>('defaultLimit');
+  }
 
   async create(createPokemonDto: CreatePokemonDto) {
     try {
       createPokemonDto.name = createPokemonDto.name.toLocaleLowerCase();
       const pokemon = await this.pokemonModel.create(createPokemonDto);
-
       return pokemon;
     } catch (error) {
       this.handleExceptions(error);
     }
   }
 
-  findAll() {
-    return `This action returns all pokemon`;
+  async createMany(createPokemonsDto: CreatePokemonDto[]) {
+    try {
+      await this.pokemonModel.insertMany(createPokemonsDto);
+    } catch (error) {
+      this.handleExceptions(error);
+    }
+  }
+
+  async findAll(paginationDto: PaginationDto) {
+    const { limit = this.defaultLimit, offset = 0 } = paginationDto;
+    const pokemons = await this.pokemonModel
+      .find()
+      .limit(limit)
+      .skip(offset)
+      .sort({
+        no: 1,
+      })
+      .select('-__v'); //removes a column
+    return pokemons;
   }
 
   async findOne(term: string) {
@@ -72,6 +94,10 @@ export class PokemonService {
     if (deletedCount === 0)
       throw new BadRequestException(`Pokemon with id "${id}" not found`);
     return;
+  }
+
+  async removeAll() {
+    await this.pokemonModel.deleteMany({});
   }
 
   private handleExceptions(error: any) {
